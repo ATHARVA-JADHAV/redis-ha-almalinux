@@ -66,19 +66,18 @@ Created a Host-only network in VirtualBox Network Manager with the following set
 
 The Host-only network provides a private network between the host machine and the VMs. DHCP is disabled because private VM addresses will be assigned manually in a later step.
 
-The NAT adapter will be retained separately to provide internet access to the VMs.
+## Step 5 - Configure two network adapters per VM
 
-## Step 5 - Attach the Host-only network to each VM
+Configured the following network adapters on all three VMs:
 
-For each VM, open **Settings > Network > Adapter 2** and configure:
+| Adapter | VirtualBox attachment | Purpose |
+|---|---|---|
+| Adapter 1 | NAT | Outbound internet access for package installation and system updates |
+| Adapter 2 | Host-only Adapter | Private communication between the host and the three VMs |
 
-- Enable Network Adapter.
-- Attached to: **Host-only Adapter**.
-- Name: **VirtualBox Host-Only Ethernet Adapter**.
+For Adapter 2, selected **VirtualBox Host-Only Ethernet Adapter**.
 
-Keep **Adapter 1** attached to **NAT**.
-
-> Complete and verify this step on all three VMs before proceeding.
+The NAT adapter provides outbound connectivity. The Host-only adapter creates a separate private network so that the Redis nodes can communicate with predictable private addresses without relying on ordinary NAT networking for VM-to-VM reachability.
 
 ## Network interface inventory
 
@@ -97,8 +96,10 @@ Record the guest interface names and addresses after booting the VMs with both a
 - [x] Inspect network interfaces using `ip -br addr`.
 - [x] Create the VirtualBox Host-only network.
 - [x] Disable the Host-only network DHCP server.
-- [ ] Attach the Host-only network as Adapter 2 on all three VMs.
+- [x] Configure Adapter 1 as NAT on all three VMs.
+- [x] Configure Adapter 2 as Host-only on all three VMs.
+- [ ] Identify the guest interface names.
 - [ ] Assign static private IP addresses.
 - [ ] Verify VM-to-VM connectivity.
 
-**Next:** Attach the Host-only network to Adapter 2 on each VM, then boot the VMs and identify the guest interface names before assigning static IP addresses.
+**Next:** Boot all three VMs and run `ip -br addr` to identify the NAT and Host-only interfaces inside AlmaLinux. Then assign static IP addresses to the Host-only interfaces and test connectivity.
