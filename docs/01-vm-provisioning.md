@@ -53,21 +53,52 @@ ip -br addr
 
 The `-br` option displays the output in brief format, with one line per interface. The `addr` subcommand displays the IP addresses assigned to those interfaces.
 
-Record the interface names and addresses here after the network configuration is finalized.
+## Step 4 - Create the VirtualBox Host-only network
 
-| VM | Interface | Address | Status |
-|---|---|---|---|
-| redis-vm1 | To be recorded | To be configured/confirmed | Pending |
-| redis-vm2 | To be recorded | To be configured/confirmed | Pending |
-| redis-vm3 | To be recorded | To be configured/confirmed | Pending |
+Created a Host-only network in VirtualBox Network Manager with the following settings:
+
+| Setting | Value |
+|---|---|
+| Network | VirtualBox Host-Only Ethernet Adapter |
+| Host IPv4 address | `192.168.56.1` |
+| IPv4 prefix | `/24` |
+| DHCP server | Disabled |
+
+The Host-only network provides a private network between the host machine and the VMs. DHCP is disabled because private VM addresses will be assigned manually in a later step.
+
+The NAT adapter will be retained separately to provide internet access to the VMs.
+
+## Step 5 - Attach the Host-only network to each VM
+
+For each VM, open **Settings > Network > Adapter 2** and configure:
+
+- Enable Network Adapter.
+- Attached to: **Host-only Adapter**.
+- Name: **VirtualBox Host-Only Ethernet Adapter**.
+
+Keep **Adapter 1** attached to **NAT**.
+
+> Complete and verify this step on all three VMs before proceeding.
+
+## Network interface inventory
+
+Record the guest interface names and addresses after booting the VMs with both adapters enabled.
+
+| VM | NAT interface/address | Host-only interface/address |
+|---|---|---|
+| redis-vm1 | To be recorded | To be recorded |
+| redis-vm2 | To be recorded | To be recorded |
+| redis-vm3 | To be recorded | To be recorded |
 
 ## Completion status
 
 - [x] Install AlmaLinux 9.8 on all three VMs.
 - [x] Assign a unique hostname to each VM.
 - [x] Inspect network interfaces using `ip -br addr`.
-- [ ] Configure the VirtualBox network adapters for the lab.
-- [ ] Assign or verify static private IP addresses.
+- [x] Create the VirtualBox Host-only network.
+- [x] Disable the Host-only network DHCP server.
+- [ ] Attach the Host-only network as Adapter 2 on all three VMs.
+- [ ] Assign static private IP addresses.
 - [ ] Verify VM-to-VM connectivity.
 
-**Next:** Configure the VirtualBox network adapters and establish a private network between the three VMs.
+**Next:** Attach the Host-only network to Adapter 2 on each VM, then boot the VMs and identify the guest interface names before assigning static IP addresses.
