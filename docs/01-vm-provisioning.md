@@ -102,7 +102,25 @@ ping -c 4 192.168.56.102
 ping -c 4 192.168.56.103
 ```
 
-Repeat equivalent tests from the other VMs to verify communication in both directions.
+Equivalent tests were performed from the other VMs to verify communication in both directions.
+
+## Step 8 - Update the operating systems
+
+Updated all three AlmaLinux systems successfully after resolving the NAT connectivity issue on VM3.
+
+```bash
+sudo dnf update -y
+```
+
+The `dnf update` operation refreshed installed packages using the configured repositories. The NAT adapter provides the outbound connectivity required to reach those repositories; the Host-only interface remains dedicated to private lab communication.
+
+**Result:** The system update completed successfully on redis-vm1, redis-vm2, and redis-vm3.
+
+## Step 9 - Verify internet access through NAT
+
+Verified that all three VMs had working outbound connectivity through their NAT adapters as part of the successful system update process.
+
+The NAT interface is used for package downloads and operating-system updates. Redis node-to-node communication will use the Host-only network and its static addresses.
 
 ## Completion status
 
@@ -115,5 +133,8 @@ Repeat equivalent tests from the other VMs to verify communication in both direc
 - [x] Configure Adapter 2 as Host-only on all three VMs.
 - [x] Assign static private IP addresses.
 - [x] Verify VM-to-VM connectivity with successful ping tests.
+- [x] Resolve the VM3 NAT DHCP issue.
+- [x] Update all three AlmaLinux systems successfully.
+- [x] Confirm working outbound connectivity required for package updates.
 
-**Next:** Update the AlmaLinux systems, confirm internet connectivity through NAT, and prepare the VMs for Redis installation.
+**Next:** Install and verify Redis on all three VMs, then prepare the six independent Redis processes required for the Cluster.
