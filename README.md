@@ -4,26 +4,36 @@ A hands-on Linux project to build, configure, secure, and test a Redis-based in-
 
 The goal is to understand not just the configuration, but also the networking, persistence, replication, failover, security, and troubleshooting involved in operating Redis.
 
+## Current lab status
+
+- Three AlmaLinux 9.8 VirtualBox VMs provisioned with static Host-only addresses.
+- NAT and Host-only networking configured; VM-to-VM connectivity verified.
+- System package updates completed successfully on all three VMs.
+- Redis installed on all three VMs using the official Redis RPM repository.
+- Redis multi-instance configuration and Cluster formation are the next implementation stages.
+
+Redis is installed as software; the six-node Cluster has **not** yet been configured or created.
+
 ## Lab environment
 
-- **OS:** AlmaLinux (VirtualBox)
+- **OS:** AlmaLinux 9.8 (VirtualBox)
 - **VMs:** 3 Linux virtual machines
 - **Redis deployment modes:** Redis Cluster and Redis Sentinel (implemented and tested separately)
-- **Networking:** Private virtual network with static IP addresses
+- **Networking:** NAT for outbound package access; Host-only network for private VM-to-VM traffic
 
-Planned VM addresses (we will confirm these during setup):
+| VM | Hostname | Host-only address |
+|---|---|---|
+| VM 1 | redis-vm1 | 192.168.56.101/24 |
+| VM 2 | redis-vm2 | 192.168.56.102/24 |
+| VM 3 | redis-vm3 | 192.168.56.103/24 |
 
-| VM | Planned address |
-|---|---|
-| redis-vm1 | 192.168.56.101 |
-| redis-vm2 | 192.168.56.102 |
-| redis-vm3 | 192.168.56.103 |
+The Host-only network is 192.168.56.0/24, the host address is 192.168.56.1, and its DHCP server is disabled.
 
 ## What we will build
 
 ### 1. Redis Cluster
 
-- Run multiple Redis processes across the three VMs.
+- Run six independent Redis server processes across the three VMs.
 - Create a cluster with three primary nodes and three replicas.
 - Understand hash slots, key distribution, redirects, and replica assignment.
 - Test node loss and Redis Cluster's native failover behavior.
@@ -55,19 +65,21 @@ Planned VM addresses (we will confirm these during setup):
 
 We will work through the lab in small, verifiable stages:
 
-1. Prepare the VMs and confirm their network connectivity.
-2. Install Redis and verify the service.
-3. Configure and test Redis Cluster.
-4. Test persistence and memory eviction.
-5. Switch to a separate Sentinel topology and test failover.
-6. Apply authentication and TLS, then repeat the relevant tests.
-7. Document commands, results, and troubleshooting.
+1. Provision the VMs and verify private connectivity.
+2. Update the operating systems and verify NAT internet access.
+3. Install Redis and inspect the package, service, and configuration paths.
+4. Configure six independent Redis instances (two per VM).
+5. Configure firewall access and form the three-primary, three-replica Cluster.
+6. Verify cluster health, hash-slot coverage, and replication.
+7. Test RDB, AOF, and memory eviction.
+8. Reconfigure the lab as a separate Sentinel topology and test failover.
+9. Apply ACL authentication and TLS/mTLS, then repeat relevant tests.
 
 Each stage will be completed and checked before moving on. Configuration files and scripts will be added only when we reach the stage that needs them.
 
 ## Repository layout
 
-The repository will grow as the lab progresses. We will add documentation, configuration examples, scripts, and tests incrementally rather than creating everything upfront.
+The repository will grow as the lab progresses. Documentation, configuration examples, scripts, and tests will be added incrementally rather than creating everything upfront.
 
 ## Important
 
