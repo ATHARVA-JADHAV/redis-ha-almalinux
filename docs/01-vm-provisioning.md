@@ -6,11 +6,11 @@ Prepare three AlmaLinux 9.8 virtual machines that will host the Redis Cluster an
 
 ## Virtual machine inventory
 
-| VM | Hostname | Operating system |
-|---|---|---|
-| VM 1 | `redis-vm1` | AlmaLinux 9.8 |
-| VM 2 | `redis-vm2` | AlmaLinux 9.8 |
-| VM 3 | `redis-vm3` | AlmaLinux 9.8 |
+| VM | Hostname | Operating system | Host-only IPv4 address |
+|---|---|---|---|
+| VM 1 | `redis-vm1` | AlmaLinux 9.8 | `192.168.56.101/24` |
+| VM 2 | `redis-vm2` | AlmaLinux 9.8 | `192.168.56.102/24` |
+| VM 3 | `redis-vm3` | AlmaLinux 9.8 | `192.168.56.103/24` |
 
 ## Step 1 - Install AlmaLinux
 
@@ -64,7 +64,7 @@ Created a Host-only network in VirtualBox Network Manager with the following set
 | IPv4 prefix | `/24` |
 | DHCP server | Disabled |
 
-The Host-only network provides a private network between the host machine and the VMs. DHCP is disabled because private VM addresses will be assigned manually in a later step.
+The Host-only network provides a private network between the host machine and the VMs. DHCP is disabled because private VM addresses are assigned manually.
 
 ## Step 5 - Configure two network adapters per VM
 
@@ -77,17 +77,32 @@ Configured the following network adapters on all three VMs:
 
 For Adapter 2, selected **VirtualBox Host-Only Ethernet Adapter**.
 
-The NAT adapter provides outbound connectivity. The Host-only adapter creates a separate private network so that the Redis nodes can communicate with predictable private addresses without relying on ordinary NAT networking for VM-to-VM reachability.
+The NAT adapter provides outbound connectivity. The Host-only adapter creates a separate private network so that the Redis nodes can communicate using stable private addresses.
 
-## Network interface inventory
+## Step 6 - Assign static IPv4 addresses
 
-Record the guest interface names and addresses after booting the VMs with both adapters enabled.
+Configured static IPv4 addresses on the Host-only interfaces using NetworkManager (`nmcli`).
 
-| VM | NAT interface/address | Host-only interface/address |
-|---|---|---|
-| redis-vm1 | To be recorded | To be recorded |
-| redis-vm2 | To be recorded | To be recorded |
-| redis-vm3 | To be recorded | To be recorded |
+| VM | Host-only IPv4 address |
+|---|---|
+| redis-vm1 | `192.168.56.101/24` |
+| redis-vm2 | `192.168.56.102/24` |
+| redis-vm3 | `192.168.56.103/24` |
+
+The `/24` prefix corresponds to subnet mask `255.255.255.0`. No default gateway is configured on the Host-only interfaces; the NAT interface remains responsible for the default route and internet access.
+
+## Step 7 - Verify VM-to-VM connectivity
+
+Tested connectivity between the three VMs using `ping`. Successful ping replies were received between the VMs, confirming basic IP connectivity over the private Host-only network.
+
+Example test from redis-vm1:
+
+```bash
+ping -c 4 192.168.56.102
+ping -c 4 192.168.56.103
+```
+
+Repeat equivalent tests from the other VMs to verify communication in both directions.
 
 ## Completion status
 
@@ -98,8 +113,7 @@ Record the guest interface names and addresses after booting the VMs with both a
 - [x] Disable the Host-only network DHCP server.
 - [x] Configure Adapter 1 as NAT on all three VMs.
 - [x] Configure Adapter 2 as Host-only on all three VMs.
-- [ ] Identify the guest interface names.
-- [ ] Assign static private IP addresses.
-- [ ] Verify VM-to-VM connectivity.
+- [x] Assign static private IP addresses.
+- [x] Verify VM-to-VM connectivity with successful ping tests.
 
-**Next:** Boot all three VMs and run `ip -br addr` to identify the NAT and Host-only interfaces inside AlmaLinux. Then assign static IP addresses to the Host-only interfaces and test connectivity.
+**Next:** Update the AlmaLinux systems, confirm internet connectivity through NAT, and prepare the VMs for Redis installation.
