@@ -1,24 +1,26 @@
 # Redis High Availability Lab on AlmaLinux
 
-A hands-on Linux project to build, configure, secure, and test a Redis-based in-memory data store across multiple AlmaLinux virtual machines.
+A hands-on Linux project to build, configure, secure, and test Redis high availability across multiple AlmaLinux virtual machines.
 
-The goal is to understand not just the configuration, but also the networking, persistence, replication, failover, security, and troubleshooting involved in operating Redis.
+The goal is to understand the networking, persistence, memory management, replication, failover, security, and troubleshooting involved in operating Redis.
 
 ## Current lab status
 
 - Three AlmaLinux 9.8 VirtualBox VMs provisioned with static Host-only addresses.
 - NAT and Host-only networking configured; VM-to-VM connectivity verified.
-- System package updates completed successfully on all three VMs.
 - Redis installed on all three VMs using the official Redis RPM repository.
-- Redis multi-instance configuration and Cluster formation are the next implementation stages.
-
-Redis is installed as software; the six-node Cluster has **not** yet been configured or created.
+- Six Redis Cluster instances configured across the three VMs.
+- Three-primary, three-replica Redis Cluster created.
+- Cluster health verified: `cluster_state:ok`, all 16,384 slots assigned, six known nodes.
+- Basic cluster-aware SET/GET test completed.
+- RDB and AOF persistence experiments performed on VM3 Redis instance `7004`; restart recovery was verified for test keys.
+- Memory limit and LRU eviction testing are the next stage.
 
 ## Lab environment
 
 - **OS:** AlmaLinux 9.8 (VirtualBox)
 - **VMs:** 3 Linux virtual machines
-- **Redis deployment modes:** Redis Cluster and Redis Sentinel (implemented and tested separately)
+- **Redis deployment modes:** Redis Cluster and Redis Sentinel (separate lab topologies)
 - **Networking:** NAT for outbound package access; Host-only network for private VM-to-VM traffic
 
 | VM | Hostname | Host-only address |
@@ -29,58 +31,76 @@ Redis is installed as software; the six-node Cluster has **not** yet been config
 
 The Host-only network is 192.168.56.0/24, the host address is 192.168.56.1, and its DHCP server is disabled.
 
-## What we will build
+## Redis Cluster topology
+
+Each VM runs two independent Redis processes. The client ports are 7000–7005 and the corresponding Cluster bus ports are 17000–17005.
+
+| VM | Primary | Replica |
+|---|---|---|
+| redis-vm1 | 7000 | 7001 |
+| redis-vm2 | 7002 | 7003 |
+| redis-vm3 | 7004 | 7005 |
+
+Replica assignments selected during cluster creation:
+
+| Primary | Replica |
+|---|---|
+| 192.168.56.101:7000 | 192.168.56.102:7003 |
+| 192.168.56.102:7002 | 192.168.56.103:7005 |
+| 192.168.56.103:7004 | 192.168.56.101:7001 |
+
+The verified primary slot ranges are:
+
+| Primary | Hash slots |
+|---|---:|
+| 192.168.56.101:7000 | 0–5460 |
+| 192.168.56.102:7002 | 5461–10922 |
+| 192.168.56.103:7004 | 10923–16383 |
+
+The cluster reported `cluster_state:ok`, `cluster_slots_assigned:16384`, `cluster_slots_ok:16384`, and `cluster_known_nodes:6`.
+
+## What this project covers
 
 ### 1. Redis Cluster
-
-- Run six independent Redis server processes across the three VMs.
-- Create a cluster with three primary nodes and three replicas.
-- Understand hash slots, key distribution, redirects, and replica assignment.
-- Test node loss and Redis Cluster's native failover behavior.
+- Six independent Redis server processes across three VMs.
+- Three primaries and three replicas.
+- Hash slots, sharding, client redirections, and replication.
+- Controlled primary failure and native Cluster failover testing.
 
 ### 2. Persistence and memory management
+- RDB snapshot testing with `BGSAVE` and restart recovery.
+- AOF testing, including AOF status inspection and restart recovery.
+- Memory limits and `allkeys-lru` eviction behavior.
 
-- Configure and test RDB snapshots.
-- Configure and test AOF persistence.
-- Set a memory limit and test the `allkeys-lru` eviction policy.
-- Verify behavior using Redis commands and logs.
+The initial RDB and AOF experiments were performed on Redis port `7004` on VM3. These tests do not mean persistence settings have been applied and verified on all six instances.
 
 ### 3. Redis Sentinel
+- A separate master-replica deployment monitored by Sentinel processes.
+- Quorum and automatic failover.
+- Client discovery of the promoted primary.
 
-- Build a separate master-replica deployment monitored by three Sentinel processes.
-- Configure quorum and automatic failover.
-- Stop the primary and observe promotion of a replica.
-- Verify how clients discover the new primary.
-
-> Redis Cluster and Sentinel are separate deployment modes in this lab. Sentinel will not be used to manage Redis Cluster failover.
+> Redis Cluster and Sentinel are separate deployment modes in this lab. Sentinel will not manage Redis Cluster failover.
 
 ### 4. Security
+- Redis ACL users and authentication.
+- Network restrictions with firewalld.
+- TLS and, if included in the final scope, mutual TLS.
 
-- Configure Redis ACL users and authentication.
-- Restrict network access with firewalld.
-- Configure TLS for encrypted connections.
-- Test mutual TLS (client certificates) if included in the final lab scope.
+## Documentation
+
+| Document | Coverage |
+|---|---|
+| [VM provisioning](docs/01-vm-provisioning.md) | VirtualBox networking, static IPs, OS setup |
+| [Redis installation](docs/02-redis-installation.md) | Official repository, package installation and service inspection |
+| [Cluster architecture](docs/03-redis-cluster-architecture.md) | Actual six-node topology, slots, replication and Cluster concepts |
+| [Persistence](docs/04-redis-persistence.md) | RDB and AOF experiments on port 7004 |
 
 ## Implementation approach
 
-We will work through the lab in small, verifiable stages:
-
-1. Provision the VMs and verify private connectivity.
-2. Update the operating systems and verify NAT internet access.
-3. Install Redis and inspect the package, service, and configuration paths.
-4. Configure six independent Redis instances (two per VM).
-5. Configure firewall access and form the three-primary, three-replica Cluster.
-6. Verify cluster health, hash-slot coverage, and replication.
-7. Test RDB, AOF, and memory eviction.
-8. Reconfigure the lab as a separate Sentinel topology and test failover.
-9. Apply ACL authentication and TLS/mTLS, then repeat relevant tests.
-
-Each stage will be completed and checked before moving on. Configuration files and scripts will be added only when we reach the stage that needs them.
-
-## Repository layout
-
-The repository will grow as the lab progresses. Documentation, configuration examples, scripts, and tests will be added incrementally rather than creating everything upfront.
+Each stage is verified before moving forward. Configuration files, scripts, terminal output, and screenshots will be added incrementally as the lab progresses.
 
 ## Important
 
-This is a learning lab, not a production-ready deployment. Passwords, certificates, firewall rules, and resource limits will be chosen for the lab and clearly documented. Never commit real passwords, private keys, or other secrets to this repository.
+This is a learning lab, not a production-ready deployment. The three-VM topology has only three VM failure domains: losing one VM also loses both Redis processes running on it. Redis replication is asynchronous and does not guarantee zero data loss.
+
+Never commit real passwords, private keys, or other secrets to this repository.
