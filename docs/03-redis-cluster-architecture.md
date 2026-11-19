@@ -1,58 +1,39 @@
-# 03 - Redis Cluster Architecture and Preparation
+# 03 - Redis Cluster Architecture and Implementation
 
 ## Objective
 
-Plan the six Redis server processes that will form a Redis Cluster with three primaries and three replicas. This document explains the topology, network ports, and Redis Cluster concepts before any cluster configuration is applied.
+Deploy and understand a six-node Redis Cluster across three AlmaLinux 9.8 virtual machines. The cluster contains three primaries and three replicas, with each replica placed on a different VM from its primary.
 
-The cluster has not yet been created. The port layout below is the intended design and will be verified during implementation.
+## Lab topology
 
-## Planned VM and node layout
+Each VM runs two independent Redis server processes. Every process has its own configuration file, data directory, log file, client port, and Cluster node configuration file.
 
-Each VM will run two independent Redis server processes. Each process is a separate Redis node with its own configuration, data directory, log, listening port, and cluster node configuration file.
-
-| VM | Host-only address | Planned Redis node | Intended role |
+| VM | Host-only address | Redis port | Role |
 |---|---|---:|---|
-| redis-vm1 | 192.168.56.101 | 7000 | Primary 1 |
-| redis-vm1 | 192.168.56.101 | 7001 | Replica |
-| redis-vm2 | 192.168.56.102 | 7002 | Primary 2 |
-| redis-vm2 | 192.168.56.102 | 7003 | Replica |
-| redis-vm3 | 192.168.56.103 | 7004 | Primary 3 |
-| redis-vm3 | 192.168.56.103 | 7005 | Replica |
+| redis-vm1 | 192.168.56.101 | 7000 | Primary |
+| redis-vm1 | 192.168.56.101 | 7001 | Replica of VM3:7004 |
+| redis-vm2 | 192.168.56.102 | 7002 | Primary |
+| redis-vm2 | 192.168.56.102 | 7003 | Replica of VM1:7000 |
+| redis-vm3 | 192.168.56.103 | 7004 | Primary |
+| redis-vm3 | 192.168.56.103 | 7005 | Replica of VM2:7002 |
 
-The intended placement is for each replica to protect a primary running on a different VM. The actual assignments must be checked using Redis Cluster node information after cluster creation; the command-line cluster creator chooses replica assignments, so the final mapping must not be assumed from port order alone.
+### Replica assignments
 
-## Why six processes on three VMs?
+The following assignments were reported by the cluster creation and node inspection:
 
-A Redis Cluster distributes data across primary nodes. Replicas maintain copies of primary data and can be promoted if a primary fails and the cluster's failure-detection and voting requirements are met.
+| Primary | Replica |
+|---|---|
+| 192.168.56.101:7000 | 192.168.56.102:7003 |
+| 192.168.56.102:7002 | 192.168.56.103:7005 |
+| 192.168.56.103:7004 | 192.168.56.101:7001 |
 
-Running two Redis processes per VM lets this lab exercise a six-node topology using three virtual machines. This is a learning topology, not equivalent to six independent physical failure domains: if one VM fails, both Redis processes on that VM are lost.
+This cross-VM placement means a single VM failure does not remove both members of the same primary-replica pair. However, the lab still has only three VM failure domains; losing a VM removes two Redis processes.
 
-## Client port and Cluster bus port
+## Ports
 
-Each Redis Cluster node uses two TCP ports for different purposes.
+Each Redis node uses a client port and a Cluster bus port. Redis derives the default bus port by adding 10,000 to the client port.
 
-### 1. Client/data port
-
-The client port accepts Redis commands from applications and tools such as `redis-cli`. In this lab, the planned client ports are:
-
-- 7000
-- 7001
-- 7002
-- 7003
-- 7004
-- 7005
-
-A client connects to a node using its Host-only IP address and client port.
-
-### 2. Cluster bus port
-
-The Cluster bus is a separate TCP communication channel used by Redis nodes to communicate with other nodes in the same cluster. It uses Redis's internal binary protocol; it is not a port for application clients or ordinary Redis commands.
-
-Nodes use the bus to exchange cluster information, send gossip messages, check node liveness, detect failures, propagate configuration changes, and coordinate failover-related operations.
-
-By default, Redis derives the Cluster bus port by adding 10,000 to the node's client port. Therefore, the planned bus ports are:
-
-| Client port | Default Cluster bus port |
+| Client port | Cluster bus port |
 |---:|---:|
 | 7000 | 17000 |
 | 7001 | 17001 |
@@ -61,80 +42,141 @@ By default, Redis derives the Cluster bus port by adding 10,000 to the node's cl
 | 7004 | 17004 |
 | 7005 | 17005 |
 
-The `cluster-port` setting can override the default bus port, but this lab will use the default derivation unless implementation testing gives us a reason to change it.
+The client port accepts Redis commands. The Cluster bus port is used for internal node-to-node communication, including gossip, failure detection, and cluster coordination. Both port ranges must be reachable between cluster nodes over the private Host-only network.
 
-**Important:** Both the client port and its corresponding Cluster bus port must be reachable between the Redis nodes. Opening only the client ports is not sufficient for a functioning cluster. The bus ports should be reachable from the other Redis nodes on the private Host-only network, not exposed to the public internet.
+## Instance configuration and service management
 
-## What is a full mesh?
+Configuration files follow this naming convention:
 
-Redis Cluster nodes maintain node-to-node connections over the Cluster bus. In a six-node cluster, every node must be able to communicate with the other five nodes.
+- `/etc/redis/redis-<PORT>.conf`
+- Data directory: `/var/lib/redis/<PORT>/`
+- Log file: `/var/log/redis/redis-<PORT>.log`
+- Cluster node state file: `/var/lib/redis/<PORT>/nodes-<PORT>.conf`
 
-This connected full-mesh arrangement allows nodes to exchange cluster state and detect when another node becomes unavailable.
+The per-instance configuration includes the node's bind addresses, client port, data directory, log file, and Cluster settings. The Cluster-specific settings include:
 
-The Cluster bus is therefore different from the client/data port:
+```conf
+cluster-enabled yes
+cluster-config-file /var/lib/redis/<PORT>/nodes-<PORT>.conf
+cluster-node-timeout 5000
+cluster-announce-ip <VM_HOST_ONLY_IP>
+cluster-announce-port <PORT>
+cluster-announce-bus-port <PORT_PLUS_10000>
+```
 
-- Client/data port: application and Redis command traffic.
-- Cluster bus port: internal Redis node-to-node coordination.
+A systemd template unit, `redis-cluster@.service`, starts an instance using the port as the unit parameter and reads `/etc/redis/redis-%i.conf`.
+
+Examples of the instance units:
+
+| VM | Instance units |
+|---|---|
+| redis-vm1 | redis-cluster@7000, redis-cluster@7001 |
+| redis-vm2 | redis-cluster@7002, redis-cluster@7003 |
+| redis-vm3 | redis-cluster@7004, redis-cluster@7005 |
+
+The package-provided standalone `redis.service` was disabled to avoid conflicting with the separately managed instances.
+
+## Firewall
+
+Redis client and Cluster bus ports were allowed for traffic from the private Host-only subnet `192.168.56.0/24`. The VM interfaces were observed in the `public` zone during the initial firewall inspection. The rules were scoped by source subnet; a later hardening pass can separate NAT and Host-only interfaces into dedicated zones after validating access requirements.
+
+Required lab port ranges:
+
+| TCP ports | Purpose | Source |
+|---|---|---|
+| 7000–7005 | Redis client/data traffic | Private lab subnet |
+| 17000–17005 | Redis Cluster bus | Private lab subnet |
+
+Do not expose these Redis ports to the public internet.
+
+## Creating the Cluster
+
+The cluster was created from VM1 with:
+
+```bash
+redis-cli --cluster create \
+  192.168.56.101:7000 \
+  192.168.56.102:7002 \
+  192.168.56.103:7004 \
+  192.168.56.101:7001 \
+  192.168.56.102:7003 \
+  192.168.56.103:7005 \
+  --cluster-replicas 1
+```
+
+The proposed topology was reviewed and confirmed at the interactive prompt.
 
 ## Hash slots and sharding
 
-Redis Cluster divides its keyspace into exactly 16,384 hash slots, numbered 0 through 16,383.
+Redis Cluster divides the keyspace into 16,384 hash slots, numbered 0 through 16,383. A key's hash slot determines which primary owns it. The created cluster distributed slots as follows:
 
-For a normal key, Redis calculates a CRC16 hash and takes the result modulo 16,384:
+| Primary | Assigned slots | Slot count |
+|---|---:|---:|
+| VM1:7000 | 0–5460 | 5,461 |
+| VM2:7002 | 5461–10922 | 5,462 |
+| VM3:7004 | 10923–16383 | 5,461 |
+
+A key written through a non-owning node may produce a `MOVED` redirection. Use cluster-aware mode (`-c`) with `redis-cli` to follow these redirects automatically:
+
+```bash
+redis-cli -c -h 192.168.56.101 -p 7000 SET project "Redis HA Lab"
+redis-cli -c -h 192.168.56.101 -p 7000 GET project
+redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER KEYSLOT project
+```
+
+The test key `project` was stored and retrieved successfully. Its hash slot was reported as 5904, which belongs to VM2 primary port 7002; the cluster-aware CLI followed the redirect.
+
+## Cluster health verification
+
+The following command was run against VM1 primary:
+
+```bash
+redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER INFO | \
+  grep -E "cluster_state|slots_assigned|slots_ok|known_nodes"
+```
+
+Observed output:
 
 ```text
-HASH_SLOT = CRC16(key) mod 16384
+cluster_state:ok
+cluster_slots_assigned:16384
+cluster_slots_ok:16384
+cluster_known_nodes:6
 ```
 
-Each primary owns a portion of these slots. When a client writes a key, the key's slot determines which primary is responsible for it. This is called sharding: the dataset is distributed across multiple primary nodes rather than stored entirely on one server.
+The cluster creation output also confirmed that all nodes agreed about the slot configuration and that all 16,384 slots were covered.
 
-A healthy, fully covered cluster should report all 16,384 slots assigned. Redis Cluster clients can follow redirections such as `MOVED` when a request reaches a node that does not own the requested key's slot.
+## Replication verification status
 
-## Replication and failover
+The intended primary-replica pairs are listed above. A direct replication read test is still being completed. A test key initially returned a `MOVED` response when queried from VM2:7003 because the key's hash slot belonged to VM3:7004. This redirection is normal Cluster behavior and does not by itself indicate a replication failure.
 
-Each replica follows one primary and maintains a copy of its dataset. Redis replication is asynchronous, so a primary failure can result in a small window of acknowledged writes not being present on the promoted replica.
-
-Redis Cluster uses node failure detection and replica promotion to provide availability, but it is not a guarantee of zero data loss. We will deliberately stop a primary later and observe the failover behavior.
-
-## Planned firewall access
-
-The Redis nodes will communicate over the private Host-only network. The intended TCP port ranges are:
-
-| Port range | Purpose | Expected source |
-|---|---|---|
-| 7000-7005 | Redis client/data connections | Lab clients and Redis nodes as required |
-| 17000-17005 | Redis Cluster bus | Other Redis nodes in the lab |
-
-We will inspect the active firewalld zone and interface assignment before adding rules. Rules will be scoped to the private lab network wherever practical. We will not expose Redis ports through the VirtualBox NAT adapter or to the public internet.
-
-## Next implementation checks
-
-Before creating instance configuration files, inspect the package-provided layout on each VM:
+To test replica reads for a key whose slot belongs to a different primary, use the replica's `READONLY` mode before reading:
 
 ```bash
-rpm -ql redis
-systemctl list-unit-files | grep -i redis
-systemctl status redis
+redis-cli -h 192.168.56.102 -p 7003 READONLY
+redis-cli -h 192.168.56.102 -p 7003 GET <KEY>
 ```
 
-Then verify that the installed Redis server and CLI versions match across the three VMs:
+The replica read should be checked only after the primary write has propagated. The full three-pair replication test and failover test remain follow-up verification tasks.
 
-```bash
-redis-server --version
-redis-cli --version
-```
+## Operational notes
 
-The exact package paths, service unit, and version outputs will guide the instance configuration. We will not overwrite the packaged default configuration blindly.
+- Use `redis-cli -c` when issuing key commands through a Cluster endpoint so that `MOVED` redirects are followed.
+- A direct connection without `-c` can return a redirection when the contacted node does not own the key's slot.
+- `READONLY` on a replica permits replica reads for slots served by the cluster; it does not make the replica writable.
+- Redis replication is asynchronous. A failover can lose writes that had not reached the replica.
+- Redis Cluster's native failover is distinct from Redis Sentinel. Sentinel will be tested in a separate topology.
 
-## Cluster creation verification criteria
+## Completion status
 
-The cluster stage will be considered complete only after the following checks succeed:
+- [x] Six Redis instance configurations created across three VMs.
+- [x] Six Cluster nodes started using systemd template instances.
+- [x] Three-primary, three-replica Cluster created.
+- [x] Replica placement across VMs confirmed from cluster creation/node output.
+- [x] All 16,384 hash slots assigned.
+- [x] `cluster_state:ok` and six known nodes verified.
+- [x] Cluster-aware SET/GET test completed.
+- [ ] Direct replication read verification completed for all three pairs.
+- [ ] Controlled primary failure and automatic failover tested.
 
-- Six Redis nodes are reachable.
-- Three nodes have the primary role and three have the replica role.
-- Each replica follows a primary on a different VM, where the topology permits.
-- All 16,384 hash slots are assigned.
-- `cluster_state:ok` is reported.
-- The node list shows the expected addresses, ports, roles, and connected links.
-
-**Next:** Inspect the installed Redis package and service layout, then create and validate the six instance configurations.
+**Next:** Complete direct replication verification, then perform persistence and memory eviction experiments.
