@@ -107,3 +107,20 @@ Each stage is verified before moving forward. Configuration files, scripts, term
 This is a learning lab, not a production-ready deployment. The three-VM topology has only three VM failure domains: losing one VM also loses both Redis processes running on it. Redis replication is asynchronous and does not guarantee zero data loss. The LRU experiment was performed on one primary; it does not imply that the same memory limit has been configured on all six instances.
 
 Never commit real passwords, private keys, or other secrets to this repository.
+
+
+## Latest Member B security update — 20 November 2026
+
+Member B's Redis Sentinel deployment now uses TLS for client connections, replica links, and Sentinel communication.
+
+- Redis TLS listener: TCP/7101; plaintext TCP/7100 disabled.
+- Sentinel TLS listener: TCP/26380; plaintext TCP/26379 disabled.
+- A private lab CA issued per-VM certificates with IP and DNS SANs.
+- TLS client PING returned `PONG` on all three Redis VMs.
+- Sentinel TLS quorum returned three usable Sentinels with quorum 2.
+- TLS failover check promoted VM3 (192.168.56.103); VM1 and VM2 were connected replicas using port 7101.
+- Final listener checks on all VMs showed only ports 7101 and 26380; Member A Cluster ports remain untouched.
+- Current TLS configuration validates server certificates but does not require client certificates (`tls-auth-clients no`); do not describe this as mutual TLS.
+- Remaining security follow-up: rotate credentials exposed during troubleshooting and securely retain/remove the CA private key after certificate issuance.
+
+Member B's ACL, TLS, Sentinel quorum and failover implementation are documented in [the Sentinel HA guide](docs/06-redis-sentinel-ha.md), [the failover runbook](docs/07-redis-sentinel-failover-testing.md), and [the configuration reference](docs/08-redis-sentinel-configuration.md).
