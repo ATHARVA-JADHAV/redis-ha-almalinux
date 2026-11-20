@@ -451,3 +451,32 @@ Result: automatic failover, continued writes, and former-primary recovery were v
 - Redis replication is asynchronous. A failover can lose writes that had not reached a replica before the primary failed. This lab verifies the specific test keys used; it does not prove zero data loss under every failure timing.
 - The three VMs are separate guests but share the same VirtualBox host. This is not equivalent to three independent physical failure domains.
 - The Redis Cluster and Sentinel topologies are separate. This runbook only operates on the standalone Redis data service on port 7100 and Sentinel on port 26379.
+
+
+## 12. TLS-mode failover verification update — 20 November 2026
+
+The Sentinel failover workflow was subsequently migrated to TLS. The final TLS-mode topology uses Redis port 7101 and Sentinel port 26380; plaintext ports 7100 and 26379 are disabled.
+
+### TLS-mode verification
+
+- Each VM's Redis TLS listener accepted a CA-validated `redis-cli --tls` connection and returned `PONG`.
+- Sentinel TLS quorum check returned `OK 3 usable Sentinels. Quorum and failover authorization can be reached`.
+- A controlled Sentinel failover was requested. TLS `ROLE` output showed VM3 (192.168.56.103) as primary and VM1/VM2 as replicas connected to VM3 at port 7101.
+- Final socket checks on all three VMs showed Redis on 7101 and Sentinel on 26380 only, with no plaintext listeners on 7100 or 26379.
+
+### TLS-mode demonstration commands
+
+```bash
+# Query Redis role over TLS; replace IP for each VM
+redis-cli --tls --cacert /etc/redis/tls/ca.crt -h <VM_IP> -p 7101 --user default --askpass ROLE
+
+# Check Sentinel quorum over TLS
+redis-cli --tls --cacert /etc/redis/tls/ca.crt -h 192.168.56.101 -p 26380 --user default --askpass SENTINEL CKQUORUM mymaster
+
+# Inspect active listeners; run on each VM
+ss -lntp | grep -E '7100|7101|26379|26380'
+```
+
+Expected final roles at the recorded check: VM3 is primary; VM1 and VM2 are replicas of 192.168.56.103 on port 7101. Expected listeners: 7101 and 26380 only.
+
+TLS-mode failover and quorum checks were performed successfully. Credential rotation remains a separate security follow-up. The current configuration uses `tls-auth-clients no`; it provides encrypted connections with server certificate validation, not mutual TLS.
