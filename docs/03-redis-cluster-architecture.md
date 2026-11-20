@@ -2,13 +2,11 @@
 
 ## Objective
 
-Deploy and understand a six-node Redis Cluster across three AlmaLinux 9.8 virtual machines. The cluster contains three primaries and three replicas, with each replica placed on a different VM from its primary.
+Deploy and operate a six-node Redis Cluster across three AlmaLinux 9.8 virtual machines. The final topology contains three primaries and three replicas, with one primary and one replica process on each VM and each replica placed on a different VM from its primary.
 
 ## Lab topology
 
-Each VM runs two independent Redis server processes. Every process has its own configuration file, data directory, log file, client port, and Cluster node configuration file.
-
-| VM | Host-only address | Redis port | Role |
+| VM | Host-only address | Redis port | Final role |
 |---|---|---:|---|
 | redis-vm1 | 192.168.56.101 | 7000 | Primary |
 | redis-vm1 | 192.168.56.101 | 7001 | Replica of VM3:7004 |
@@ -17,17 +15,51 @@ Each VM runs two independent Redis server processes. Every process has its own c
 | redis-vm3 | 192.168.56.103 | 7004 | Primary |
 | redis-vm3 | 192.168.56.103 | 7005 | Replica of VM2:7002 |
 
-### Replica assignments
+## Final primary-replica assignments
 
-The following assignments were reported by the cluster creation and node inspection:
+| Primary | Replica | Replica's host |
+|---|---|---|
+| 192.168.56.101:7000 | 192.168.56.102:7003 | VM2 |
+| 192.168.56.102:7002 | 192.168.56.103:7005 | VM3 |
+| 192.168.56.103:7004 | 192.168.56.101:7001 | VM1 |
 
-| Primary | Replica |
-|---|---|
-| 192.168.56.101:7000 | 192.168.56.102:7003 |
-| 192.168.56.102:7002 | 192.168.56.103:7005 |
-| 192.168.56.103:7004 | 192.168.56.101:7001 |
+### Topology balancing operation
 
-This cross-VM placement means a single VM failure does not remove both members of the same primary-replica pair. However, the lab still has only three VM failure domains; losing a VM removes two Redis processes.
+An initial inspection found an unbalanced role distribution: VM1 hosted primaries 7000 and 7001, VM2 hosted primary 7002 and replica 7003, while VM3 hosted replicas 7004 and 7005.
+
+The topology was rebalanced using the following operations:
+
+1. On VM3, port 7004 was promoted using a Cluster failover operation.
+2. On VM1, port 7001 was configured to replicate from the promoted VM3:7004 node.
+3. Cluster state and node roles were inspected again.
+
+Commands recorded for the operation:
+
+```bash
+# On VM3
+redis-cli -h 127.0.0.1 -p 7004 CLUSTER FAILOVER
+
+# On VM1
+redis-cli -h 127.0.0.1 -p 7001 CLUSTER REPLICATE f82c4e90e261be4f0edad1ac3d501e70191f296d
+
+# Verify
+redis-cli -h 192.168.56.101 -p 7000 CLUSTER INFO
+redis-cli -h 192.168.56.101 -p 7000 CLUSTER NODES
+```
+
+The resulting topology reported VM3:7004 as primary for slots 10923–16383 and VM1:7001 as its replica. The final topology is balanced by process role and distributes each primary's replica to another VM.
+
+## Hash slots and sharding
+
+Redis Cluster divides the keyspace into 16,384 hash slots, numbered 0 through 16,383. A key's hash slot determines which primary owns it.
+
+| Primary | Assigned slots | Slot count |
+|---|---:|---:|
+| VM1:7000 | 0–5460 | 5,461 |
+| VM2:7002 | 5461–10922 | 5,462 |
+| VM3:7004 | 10923–16383 | 5,461 |
+
+A key written through a non-owning node may produce a `MOVED` redirection. Use cluster-aware mode (`-c`) with `redis-cli` to follow these redirects automatically.
 
 ## Ports
 
@@ -53,7 +85,7 @@ Configuration files follow this naming convention:
 - Log file: `/var/log/redis/redis-<PORT>.log`
 - Cluster node state file: `/var/lib/redis/<PORT>/nodes-<PORT>.conf`
 
-The per-instance configuration includes the node's bind addresses, client port, data directory, log file, and Cluster settings. The Cluster-specific settings include:
+The per-instance configuration includes bind addresses, client port, data directory, log file, and Cluster settings. Key Cluster settings include:
 
 ```conf
 cluster-enabled yes
@@ -64,34 +96,20 @@ cluster-announce-port <PORT>
 cluster-announce-bus-port <PORT_PLUS_10000>
 ```
 
-A systemd template unit, `redis-cluster@.service`, starts an instance using the port as the unit parameter and reads `/etc/redis/redis-%i.conf`.
-
-Examples of the instance units:
-
-| VM | Instance units |
-|---|---|
-| redis-vm1 | redis-cluster@7000, redis-cluster@7001 |
-| redis-vm2 | redis-cluster@7002, redis-cluster@7003 |
-| redis-vm3 | redis-cluster@7004, redis-cluster@7005 |
-
-The package-provided standalone `redis.service` was disabled to avoid conflicting with the separately managed instances.
+A systemd template unit, `redis-cluster@.service`, starts an instance using the port as the unit parameter and reads `/etc/redis/redis-%i.conf`. The package-provided standalone `redis.service` was disabled to avoid conflicting with these separately managed instances.
 
 ## Firewall
 
-Redis client and Cluster bus ports were allowed for traffic from the private Host-only subnet `192.168.56.0/24`. The VM interfaces were observed in the `public` zone during the initial firewall inspection. The rules were scoped by source subnet; a later hardening pass can separate NAT and Host-only interfaces into dedicated zones after validating access requirements.
-
-Required lab port ranges:
+Redis client and Cluster bus ports were allowed for traffic from the private Host-only subnet `192.168.56.0/24`. The VM interfaces were observed in the `public` zone during the initial firewall inspection. Rules were scoped by source subnet. Do not expose Redis ports to the public internet.
 
 | TCP ports | Purpose | Source |
 |---|---|---|
 | 7000–7005 | Redis client/data traffic | Private lab subnet |
 | 17000–17005 | Redis Cluster bus | Private lab subnet |
 
-Do not expose these Redis ports to the public internet.
+## Cluster creation
 
-## Creating the Cluster
-
-The cluster was created from VM1 with:
+The initial Cluster was created from VM1 with:
 
 ```bash
 redis-cli --cluster create \
@@ -104,38 +122,18 @@ redis-cli --cluster create \
   --cluster-replicas 1
 ```
 
-The proposed topology was reviewed and confirmed at the interactive prompt.
-
-## Hash slots and sharding
-
-Redis Cluster divides the keyspace into 16,384 hash slots, numbered 0 through 16,383. A key's hash slot determines which primary owns it. The created cluster distributed slots as follows:
-
-| Primary | Assigned slots | Slot count |
-|---|---:|---:|
-| VM1:7000 | 0–5460 | 5,461 |
-| VM2:7002 | 5461–10922 | 5,462 |
-| VM3:7004 | 10923–16383 | 5,461 |
-
-A key written through a non-owning node may produce a `MOVED` redirection. Use cluster-aware mode (`-c`) with `redis-cli` to follow these redirects automatically:
-
-```bash
-redis-cli -c -h 192.168.56.101 -p 7000 SET project "Redis HA Lab"
-redis-cli -c -h 192.168.56.101 -p 7000 GET project
-redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER KEYSLOT project
-```
-
-The test key `project` was stored and retrieved successfully. Its hash slot was reported as 5904, which belongs to VM2 primary port 7002; the cluster-aware CLI followed the redirect.
+The topology was subsequently rebalanced as described above.
 
 ## Cluster health verification
 
-The following command was run against VM1 primary:
+The following checks were used:
 
 ```bash
-redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER INFO | \
-  grep -E "cluster_state|slots_assigned|slots_ok|known_nodes"
+redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER INFO
+redis-cli -c -h 192.168.56.101 -p 7000 CLUSTER NODES
 ```
 
-Observed output:
+The earlier captured health output showed:
 
 ```text
 cluster_state:ok
@@ -144,39 +142,38 @@ cluster_slots_ok:16384
 cluster_known_nodes:6
 ```
 
-The cluster creation output also confirmed that all nodes agreed about the slot configuration and that all 16,384 slots were covered.
+After the topology rebalance, the report again recorded `cluster_state:ok` and the final node-role assignments listed above.
 
-## Replication verification status
+## Replication and recovery verification
 
-The intended primary-replica pairs are listed above. A direct replication read test is still being completed. A test key initially returned a `MOVED` response when queried from VM2:7003 because the key's hash slot belonged to VM3:7004. This redirection is normal Cluster behavior and does not by itself indicate a replication failure.
+The final topology's replication checks reported:
 
-To test replica reads for a key whose slot belongs to a different primary, use the replica's `READONLY` mode before reading:
+- VM1:7000 is primary; VM2:7003 is its replica, with `master_link_status:up`.
+- VM2:7002 is primary; VM3:7005 is its replica.
+- VM3:7004 is primary; VM1:7001 is its replica.
 
-```bash
-redis-cli -h 192.168.56.102 -p 7003 READONLY
-redis-cli -h 192.168.56.102 -p 7003 GET <KEY>
-```
-
-The replica read should be checked only after the primary write has propagated. The full three-pair replication test and failover test remain follow-up verification tasks.
+A recovery marker was written through primary VM1:7000 and read from replica VM2:7003. Replica 7003 was restarted, returned `PONG`, retained the replicated recovery marker, and its replication link returned to `up` after reconnecting. The final Cluster check reported `cluster_state:ok`.
 
 ## Operational notes
 
 - Use `redis-cli -c` when issuing key commands through a Cluster endpoint so that `MOVED` redirects are followed.
 - A direct connection without `-c` can return a redirection when the contacted node does not own the key's slot.
-- `READONLY` on a replica permits replica reads for slots served by the cluster; it does not make the replica writable.
+- `READONLY` on a replica permits replica reads for slots served by the Cluster; it does not make the replica writable.
 - Redis replication is asynchronous. A failover can lose writes that had not reached the replica.
 - Redis Cluster's native failover is distinct from Redis Sentinel. Sentinel will be tested in a separate topology.
+- The three-VM lab has three VM failure domains. Each VM contains two Redis processes, so losing a VM removes both processes hosted there.
 
 ## Completion status
 
 - [x] Six Redis instance configurations created across three VMs.
-- [x] Six Cluster nodes started using systemd template instances.
 - [x] Three-primary, three-replica Cluster created.
-- [x] Replica placement across VMs confirmed from cluster creation/node output.
+- [x] One primary and one replica process per VM in the final topology.
+- [x] Each replica placed on a different VM from its primary.
 - [x] All 16,384 hash slots assigned.
-- [x] `cluster_state:ok` and six known nodes verified.
-- [x] Cluster-aware SET/GET test completed.
-- [ ] Direct replication read verification completed for all three pairs.
-- [ ] Controlled primary failure and automatic failover tested.
+- [x] Cluster health reported as `cluster_state:ok` with six known nodes.
+- [x] Final primary-replica links inspected.
+- [x] Recovery marker survived replica restart and replication reconnected.
+- [ ] Capture and commit final screenshots/evidence.
+- [ ] Perform a separately documented Cluster-native primary failure/failover exercise, if required by the final project scope.
 
-**Next:** Complete direct replication verification, then perform persistence and memory eviction experiments.
+**Next:** Complete the evidence capture and any remaining Cluster-native failover exercise, then proceed to Member B's separate Sentinel and security topology.
