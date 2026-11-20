@@ -154,6 +154,21 @@ The final topology's replication checks reported:
 
 A recovery marker was written through primary VM1:7000 and read from replica VM2:7003. Replica 7003 was restarted, returned `PONG`, retained the replicated recovery marker, and its replication link returned to `up` after reconnecting. The final Cluster check reported `cluster_state:ok`.
 
+### Cluster-native primary failover exercise
+
+A controlled failover exercise was subsequently reported using VM1:7000 and its replica VM2:7003:
+
+1. Cluster health and node roles were inspected before the test.
+2. A test key using the hash tag `{lru_v1_2}` was written through VM1:7000 and checked on VM2:7003.
+3. The primary instance was stopped on VM1 with `sudo systemctl stop redis-cluster@7000`.
+4. The Cluster was inspected from VM2:7003 using `CLUSTER INFO` and `CLUSTER NODES`.
+5. VM2:7003 was reported promoted to primary.
+6. The pre-failover test key was checked through the promoted node, and a new write was reported successful.
+
+This exercise demonstrates Redis Cluster's native failover path: the replica can be promoted when its primary becomes unavailable and the remaining Cluster masters authorize the failover. Redis replication is asynchronous, so writes not yet replicated before the outage are not guaranteed to survive.
+
+The available test report covers promotion and post-promotion reads/writes. Restarting the former primary VM1:7000 and verifying that it rejoins as a replica should be recorded separately once that recovery check has been performed.
+
 ## Operational notes
 
 - Use `redis-cli -c` when issuing key commands through a Cluster endpoint so that `MOVED` redirects are followed.
@@ -173,7 +188,10 @@ A recovery marker was written through primary VM1:7000 and read from replica VM2
 - [x] Cluster health reported as `cluster_state:ok` with six known nodes.
 - [x] Final primary-replica links inspected.
 - [x] Recovery marker survived replica restart and replication reconnected.
-- [ ] Capture and commit final screenshots/evidence.
-- [ ] Perform a separately documented Cluster-native primary failure/failover exercise, if required by the final project scope.
+- [x] Controlled primary outage tested for VM1:7000.
+- [x] VM2:7003 reported promoted to primary after VM1:7000 stopped.
+- [x] Pre-failover test key and a new write checked through the promoted node.
+- [ ] Restart former primary VM1:7000 and verify its rejoin/replica role.
+- [ ] Commit final screenshots/evidence to the repository.
 
-**Next:** Complete the evidence capture and any remaining Cluster-native failover exercise, then proceed to Member B's separate Sentinel and security topology.
+**Next:** Complete the former-primary rejoin check and evidence commit. Member B is implemented separately using Redis Sentinel; Sentinel does not manage this Cluster.
