@@ -398,3 +398,43 @@ The detailed, repeatable procedure with per-VM commands, expected outputs, recov
 - The Sentinel authentication fix and Redis replication authentication fix are separate: Sentinel client authentication uses the Sentinel configuration, while Redis replica authentication to the data primary uses `masterauth` in the Redis data configuration.
 - TLS for Redis client, replication, and Sentinel traffic remains future work; authentication alone is not TLS encryption.
 - This Sentinel deployment manages only the standalone Redis service on port 7100. It does not manage or alter Member A's Redis Cluster on ports 7000–7005.
+
+
+## 10. Final topology and ACL verification update — 20 November 2026
+
+The live topology was subsequently returned to the intended arrangement, with VM1 as primary:
+
+| VM | Host-only IP | Redis role | Redis port | Sentinel port |
+|---|---|---|---:|---:|
+| redis-vm1 | 192.168.56.101 | Primary | 7100 | 26379 |
+| redis-vm2 | 192.168.56.102 | Replica | 7100 | 26379 |
+| redis-vm3 | 192.168.56.103 | Replica | 7100 | 26379 |
+
+A manual Sentinel failover request was accepted and the role checks then confirmed VM1 as primary, with VM2 and VM3 connected as replicas. VM1's `ROLE` output listed both replicas.
+
+From VM1, authenticated `SENTINEL CKQUORUM mymaster` returned:
+
+```text
+OK 3 usable Sentinels. Quorum and failover authorization can be reached
+```
+
+This confirms that all three Sentinels were usable and the configured quorum/failover authorization requirement could be met at the time of the check.
+
+### Redis ACL implementation verified
+
+The Redis data instances now use external ACL files at `/var/lib/redis/7100/users.acl` on all three VMs. The application user `app-user` is limited to keys matching `app:*` and the commands `GET`, `SET`, `DEL`, `EXISTS`, `EXPIRE`, `TTL`, `PERSIST`, and `INCR`; other commands and key patterns are denied.
+
+VM3's Redis data service was restarted after configuring its ACL file. After restart, both ACL users (`default` and `app-user`) were present and VM3 rejoined VM1 as a connected replica. On VM1, application-user write/read against `app:acl-check` succeeded, while reading `other:acl-check` returned `NOPERM`. A write attempted on VM3 while it was a replica returned `READONLY`, as expected for a Redis replica.
+
+### Updated remaining work
+
+- [x] Configure Redis ACL application user and key/command restrictions on all three data instances.
+- [x] Persist ACLs using external ACL files on all three VMs.
+- [x] Restart VM3 and verify ACLs load from its ACL file.
+- [x] Verify application-user write/read on the primary and deny access outside `app:*`.
+- [x] Verify Sentinel quorum and failover authorization with `SENTINEL CKQUORUM`.
+- [ ] Rotate credentials exposed during troubleshooting and verify authentication on all nodes.
+- [ ] Implement and verify TLS for Redis client, replication, and Sentinel communication.
+- [ ] Complete remaining Redis Cluster former-primary rejoin verification and collect final screenshots/evidence.
+
+The earlier section describing VM3 as the primary records the successful failover test at that point in time. The topology table in this update records the later verified live state.
