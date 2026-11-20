@@ -245,6 +245,17 @@ Next: verify unauthenticated local PING behavior on VM3, then securely configure
 - The earlier VM1 requirepass versus VM3 masterauth comparison used `sha256sum` with a trailing newline; the newer VM1 hash removed that newline. Those earlier fingerprints are therefore not directly comparable to the current hash.
 - Before changing ACLs, compare VM1 requirepass and VM3 masterauth using the same newline-free method. Then align VM3's default-user authentication and masterauth with the primary using a controlled, secure procedure.
 
+
+### VM3 authentication comparison clarified — 20 November 2026
+
+A consistent comparison was made after stripping quotation marks from the config values and hashing without a trailing newline:
+
+- VM1 `requirepass` fingerprint: `13a3ec27...1263f6`.
+- VM3 `masterauth` fingerprint: `13a3ec27...1263f6`.
+- Result: the VM3 replication credential matches VM1's configured primary password.
+
+The VM3 file inspection also showed a `requirepass` value that appears to omit the first character compared with `masterauth`, and an explicit `user default` ACL hash that differs from the primary password fingerprint. Therefore, the remaining issue concerns VM3's local default-user authentication configuration, not the on-disk masterauth value. Preserve the matching masterauth value while resolving the default-user ACL/password conflict.
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
