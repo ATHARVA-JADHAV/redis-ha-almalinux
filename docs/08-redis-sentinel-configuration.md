@@ -484,3 +484,39 @@ Sentinel can rewrite `sentinel.conf` during normal operation. Take a backup befo
 - [ ] Keep passwords, hashes, ACL secrets, and private keys out of Git.
 - [ ] Keep SELinux enforcing and firewall rules restricted to the Host-only subnet.
 - [ ] Treat TLS as separate remaining work; password authentication does not encrypt network traffic.
+
+
+## 12. Redis ACL implementation and persistence — 20 November 2026
+
+Redis ACLs were configured for the Member B data instances on TCP/7100 using an external ACL file on all three VMs.
+
+### ACL file and Redis configuration
+
+- ACL file on each VM: `/var/lib/redis/7100/users.acl`.
+- Redis data config on each VM includes: `aclfile /var/lib/redis/7100/users.acl`.
+- ACL file ownership/mode: `redis:redis`, `640`; the parent data directory remains owned by `redis:redis` with mode `750`.
+- The inline default-user ACL entry was removed from the Redis data config when switching to the external ACL file.
+- VM1, VM2 and VM3 each have the `default` and `app-user` entries persisted in the external ACL file. Do not copy ACL hashes or passwords into this repository.
+
+### Application user permissions
+
+The `app-user` ACL is restricted to the `app:*` key pattern and has only the following commands enabled:
+
+```text
+GET SET DEL EXISTS EXPIRE TTL PERSIST INCR
+```
+
+The user has no channel permissions (Pub/Sub is not enabled) and all other commands are denied. The default user remains enabled with the lab's existing permissions.
+
+### Verification performed
+
+- VM1 and VM2: application-user access to an `app:*` key was accepted; access to a key outside that pattern returned `NOPERM`.
+- VM3: Redis data service `redis-sentinel-lab.service` was restarted after configuring the external ACL file. The service returned to `active (running)`; `ACL LIST` showed both `default` and `app-user` loaded from the file; `ROLE` confirmed VM3 rejoined as a connected replica of VM1.
+- VM1: as `app-user`, `SET app:acl-check persisted` returned `OK`, and `GET app:acl-check` returned the stored value. `GET other:acl-check` returned `NOPERM`.
+- VM3: an attempted write as `app-user` returned `READONLY` because VM3 was a replica at the time; this is expected Redis replica behavior, not an ACL denial. Its out-of-pattern read returned `NOPERM`.
+
+The ACL persistence and permission checks are therefore verified. The VM3 replica write test is not a valid write-permission test; the successful VM1 primary write test supplies that verification.
+
+### Security follow-up
+
+Credentials pasted into the project conversation during troubleshooting must be rotated before security sign-off. Keep real passwords and hashes out of Git. TLS remains separate outstanding work; ACL authentication does not encrypt network traffic.
