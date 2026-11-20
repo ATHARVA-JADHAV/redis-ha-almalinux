@@ -22,7 +22,7 @@ The goal is to understand networking, persistence, memory management, replicatio
 - Remaining security close-out: rotate credentials exposed during troubleshooting. Member B TLS for Redis clients, replication, and Sentinel communication is implemented and verified.
 - Member B Sentinel HA deployment uses Redis TLS port 7101 and Sentinel TLS port 26380; plaintext ports 7100 and 26379 are disabled. Three Sentinels run with quorum 2; automatic failover, post-failover writes, and former-primary recovery were verified. The latest TLS-mode failover check showed VM3 primary with VM1/VM2 as replicas.
 - Member B ACL implementation verified: external ACL files on all three Redis data instances, restricted `app-user` (`app:*` plus the approved read/write commands), ACL persistence after VM3 restart, successful application write/read on VM1, and `NOPERM` for an out-of-pattern key.
-- Sentinel quorum/failover authorization verified with `SENTINEL CKQUORUM mymaster` (3 usable Sentinels; quorum 2). Current verified Member B topology: VM1 primary, VM2 and VM3 replicas.
+- Sentinel quorum/failover authorization verified with `SENTINEL CKQUORUM mymaster` (3 usable Sentinels; quorum 2). **Historical note:** VM1 was primary in an earlier pre-TLS test; this is not the latest recorded topology. The latest TLS-mode failover check (20 November 2026) recorded VM3 as primary and VM1/VM2 as replicas. Verify live roles during the demonstration rather than treating either historical snapshot as guaranteed current state.
 
 ## Lab environment
 
