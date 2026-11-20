@@ -91,7 +91,9 @@ The final role balance was achieved by promoting VM3:7004 to primary for slots 1
 | [Cluster architecture](docs/03-redis-cluster-architecture.md) | Final balanced six-node topology, slots, replication and health |
 | [Persistence](docs/04-redis-persistence.md) | RDB/AOF tests, six-instance settings audit and recovery |
 | [Memory management](docs/05-redis-memory-management.md) | maxmemory, allkeys-lru eviction, workload and replica verification |
-| [Redis Sentinel high availability](docs/06-redis-sentinel-ha.md) | Separate primary-replica deployment, Sentinel configuration, authentication, quorum, failover results and troubleshooting |\n| [Redis Sentinel failover and recovery runbook](docs/07-redis-sentinel-failover-testing.md) | Step-by-step per-VM preflight, controlled primary failure, promotion verification, post-failover writes, former-primary recovery and troubleshooting |
+| [Redis Sentinel high availability](docs/06-redis-sentinel-ha.md) | Separate primary-replica deployment, Sentinel configuration, authentication, quorum, failover results and troubleshooting |
+| [Redis Sentinel failover and recovery runbook](docs/07-redis-sentinel-failover-testing.md) | Step-by-step per-VM preflight, controlled primary failure, promotion verification, post-failover writes, former-primary recovery and troubleshooting |
+| [Redis Sentinel configuration and file reference](docs/08-redis-sentinel-configuration.md) | Configuration files, sanitized contents, systemd units, directories, ownership, firewall rules and creation sequence |
 
 ## Implementation approach
 
