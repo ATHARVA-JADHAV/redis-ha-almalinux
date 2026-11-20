@@ -19,6 +19,7 @@ The goal is to understand networking, persistence, memory management, replicatio
 - `allkeys-lru` eviction demonstrated on primary VM1:7000 with a 16 MiB memory limit.
 - Cluster-native failover exercise reported: VM1:7000 was stopped, VM2:7003 was promoted, and the test key plus a new write were checked through the promoted node.
 - Remaining Member A close-out: restart former primary VM1:7000 and verify its rejoin as a replica; commit final screenshots/evidence.
+- Member B Sentinel lab initialized separately on Redis port 7100. VM2 replication from VM1 is verified; VM3 service is running but its replication link is currently down. Sentinel processes have not yet been deployed.
 
 ## Lab environment
 
@@ -90,6 +91,7 @@ The final role balance was achieved by promoting VM3:7004 to primary for slots 1
 | [Cluster architecture](docs/03-redis-cluster-architecture.md) | Final balanced six-node topology, slots, replication and health |
 | [Persistence](docs/04-redis-persistence.md) | RDB/AOF tests, six-instance settings audit and recovery |
 | [Memory management](docs/05-redis-memory-management.md) | maxmemory, allkeys-lru eviction, workload and replica verification |
+| [Redis Sentinel high availability](docs/06-redis-sentinel-ha.md) | Separate primary-replica deployment, systemd service, authentication, replication progress and troubleshooting |
 
 ## Implementation approach
 
