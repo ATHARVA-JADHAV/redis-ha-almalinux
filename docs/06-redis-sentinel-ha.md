@@ -217,6 +217,25 @@ sudo awk '$1=="requirepass" || $1=="masterauth" {$2="<REDACTED>"} {print}' /etc/
 
 Next: inspect live Redis authentication settings on VM1 and VM3 using authenticated `CONFIG GET` commands, without printing secrets. Then inspect VM3 logs after a controlled service restart only if the live settings indicate it is needed.
 
+
+### VM3 replication recovered — 20 November 2026
+
+A later VM3 replication check reported:
+
+```text
+role:slave
+master_host:192.168.56.101
+master_port:7100
+master_link_status:up
+master_sync_in_progress:0
+```
+
+This confirms the VM3-to-VM1 replication link was up at the time of the check.
+
+The same command attempted authentication using the literal instructional placeholder rather than the actual secret and returned an AUTH error stating that no password was configured for VM3's default user. Therefore, VM3's local client-authentication state is not yet verified and may be unprotected, even though its replication link is currently up. Do not infer that VM3's local requirepass is active from the on-disk directive alone.
+
+Next: verify unauthenticated local PING behavior on VM3, then securely configure and persist local client authentication if absent. Re-check replication afterward. Do not expose secrets in command output or commit them.
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
