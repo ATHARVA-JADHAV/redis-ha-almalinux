@@ -207,6 +207,16 @@ Use this safe inspection command on VM3:
 sudo awk '$1=="requirepass" || $1=="masterauth" {$2="<REDACTED>"} {print}' /etc/redis/redis-7100.conf
 ```
 
+
+### VM3 password fingerprint comparison — 20 November 2026
+
+- SHA-256 of VM1's configured `requirepass` value was collected without displaying the secret.
+- SHA-256 of VM3's configured `masterauth` value was collected the same way.
+- Both hashes matched: `8e4073bf...5a074ba` (full hash intentionally not necessary in this narrative).
+- This confirms the two on-disk values match. It does not yet prove the running Redis processes loaded the same values or that VM1's live authentication configuration matches its file.
+
+Next: inspect live Redis authentication settings on VM1 and VM3 using authenticated `CONFIG GET` commands, without printing secrets. Then inspect VM3 logs after a controlled service restart only if the live settings indicate it is needed.
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
