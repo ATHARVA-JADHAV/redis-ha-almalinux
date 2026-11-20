@@ -236,6 +236,15 @@ The same command attempted authentication using the literal instructional placeh
 
 Next: verify unauthenticated local PING behavior on VM3, then securely configure and persist local client authentication if absent. Re-check replication afterward. Do not expose secrets in command output or commit them.
 
+
+### VM3 ACL password mismatch identified — 20 November 2026
+
+- VM1's configured requirepass value was hashed without a trailing newline: `13a3ec27...1263f6`.
+- VM3's explicit `user default` ACL password hash is `c44d5c93...b3d775`.
+- These fingerprints differ. This establishes that VM3's explicit default-user ACL password hash does not correspond to the configured VM1 requirepass value.
+- The earlier VM1 requirepass versus VM3 masterauth comparison used `sha256sum` with a trailing newline; the newer VM1 hash removed that newline. Those earlier fingerprints are therefore not directly comparable to the current hash.
+- Before changing ACLs, compare VM1 requirepass and VM3 masterauth using the same newline-free method. Then align VM3's default-user authentication and masterauth with the primary using a controlled, secure procedure.
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
