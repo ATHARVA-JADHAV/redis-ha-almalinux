@@ -17,7 +17,8 @@ The goal is to understand networking, persistence, memory management, replicatio
 - AOF fsync policy reported as `everysec` across all six instances.
 - RDB/AOF restart recovery tested; replica restart and replication reconnection verified.
 - `allkeys-lru` eviction demonstrated on primary VM1:7000 with a 16 MiB memory limit.
-- Next: final evidence capture and any additional Cluster-native failover verification before moving to Member B.
+- Cluster-native failover exercise reported: VM1:7000 was stopped, VM2:7003 was promoted, and the test key plus a new write were checked through the promoted node.
+- Remaining Member A close-out: restart former primary VM1:7000 and verify its rejoin as a replica; commit final screenshots/evidence.
 
 ## Lab environment
 
@@ -69,7 +70,7 @@ The final role balance was achieved by promoting VM3:7004 to primary for slots 1
 - Hash slots, sharding, redirections, and cross-VM replication.
 - RDB snapshots and AOF persistence.
 - Memory limits and `allkeys-lru` eviction.
-- Restart recovery and replication reconnection.
+- Restart recovery, replication reconnection, and Cluster-native primary failover.
 
 ### Member B — High availability and security
 - Separate Redis Sentinel master-replica topology.
