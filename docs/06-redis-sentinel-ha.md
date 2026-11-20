@@ -390,7 +390,7 @@ Final verification confirmed VM3 as primary with VM1 and VM2 as online replicas.
 | Post-failover write replication | Verified |
 | Former-primary recovery | Verified |
 
-The detailed, repeatable procedure with per-VM commands, expected outputs, recovery instructions, and troubleshooting is in [Redis Sentinel Failover and Recovery Runbook](07-redis-sentinel-failover-testing.md).
+The detailed, repeatable procedure with per-VM commands, expected outputs, recovery instructions, and troubleshooting is in [Redis Sentinel Failover and Recovery Runbook](07-redis-sentinel-failover-testing.md). The files, sanitized configuration contents, systemd units, directories, permissions, firewall rules, and build sequence are documented in [Redis Sentinel Configuration and File Reference](08-redis-sentinel-configuration.md).
 
 ### Security and scope notes
 
