@@ -256,6 +256,11 @@ A consistent comparison was made after stripping quotation marks from the config
 
 The VM3 file inspection also showed a `requirepass` value that appears to omit the first character compared with `masterauth`, and an explicit `user default` ACL hash that differs from the primary password fingerprint. Therefore, the remaining issue concerns VM3's local default-user authentication configuration, not the on-disk masterauth value. Preserve the matching masterauth value while resolving the default-user ACL/password conflict.
 
+
+### VM3 local authentication check — 20 November 2026
+
+A fresh unauthenticated local PING to VM3 returned `NOAUTH Authentication required`. This confirms that local client authentication is active in the running instance. The expected credential still failed earlier, consistent with the mismatch between the explicit `user default` ACL hash and the primary password. VM3's on-disk `masterauth` fingerprint matches VM1's `requirepass` fingerprint.
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
