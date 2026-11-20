@@ -271,14 +271,19 @@ A fresh unauthenticated local PING to VM3 returned `NOAUTH Authentication requir
 
 ## 8. Remaining work
 
+The following checklist reflects the state after the final verification recorded below.
+
 - [x] Diagnose VM3 replication link and verify master_link_status:up.
 - [x] Verify data replication from VM1 to both replicas.
-- [ ] Deploy one Sentinel process on each VM, using TCP/26379.
-- [ ] Configure Sentinel monitoring for mymaster with quorum 2.
-- [ ] Verify Sentinel discovery and peer communication.
-- [ ] Perform a controlled primary-failure test and verify automatic promotion.
-- [ ] Verify client discovery of the promoted primary.
-- [ ] Implement ACL authentication.
+- [x] Deploy one Sentinel process on each VM, using TCP/26379.
+- [x] Configure Sentinel monitoring for mymaster with quorum 2.
+- [x] Verify Sentinel discovery and peer communication.
+- [x] Perform a controlled primary-failure test and verify automatic promotion.
+- [x] Verify Sentinel client discovery of the promoted primary.
+- [x] Verify post-failover writes and replication to the surviving replica.
+- [x] Recover the former primary as a replica and verify its replication link.
+- [ ] Rotate credentials exposed during troubleshooting and verify authentication on all nodes.
+- [ ] Implement a complete Redis ACL user/permission model.
 - [ ] Implement TLS for Redis client, replication, and Sentinel communication as designed.
 - [ ] Add sanitized configuration examples and screenshots/evidence.
 
