@@ -271,8 +271,8 @@ A fresh unauthenticated local PING to VM3 returned `NOAUTH Authentication requir
 
 ## 8. Remaining work
 
-- [ ] Diagnose VM3 replication link and verify master_link_status:up.
-- [ ] Verify data replication from VM1 to both replicas.
+- [x] Diagnose VM3 replication link and verify master_link_status:up.
+- [x] Verify data replication from VM1 to both replicas.
 - [ ] Deploy one Sentinel process on each VM, using TCP/26379.
 - [ ] Configure Sentinel monitoring for mymaster with quorum 2.
 - [ ] Verify Sentinel discovery and peer communication.
@@ -281,3 +281,32 @@ A fresh unauthenticated local PING to VM3 returned `NOAUTH Authentication requir
 - [ ] Implement ACL authentication.
 - [ ] Implement TLS for Redis client, replication, and Sentinel communication as designed.
 - [ ] Add sanitized configuration examples and screenshots/evidence.
+
+
+### Primary and both replicas verified — 20 November 2026
+
+The VM3 authentication mismatch was corrected. The explicit conflicting `user default` ACL line was removed from VM3's configuration, and a newline-free SHA-256 comparison confirmed that VM3's `masterauth` and `requirepass` values match.
+
+After restarting the VM3 Redis data service, authenticated local access succeeded and `INFO replication` reported:
+
+```text
+role:slave
+master_host:192.168.56.101
+master_port:7100
+master_link_status:up
+master_sync_in_progress:0
+```
+
+The final replication check on VM1 reported:
+
+```text
+role:master
+connected_slaves:2
+slave0:ip=192.168.56.102,port=7100,state=online,offset=3402,lag=0
+slave1:ip=192.168.56.103,port=7100,state=online,offset=3402,lag=0
+master_repl_offset:3402
+```
+
+Result: VM1 is the primary; VM2 and VM3 are both connected replicas and were online with zero reported lag at the time of verification. This completes the standalone Redis primary-replica foundation. The earlier VM3 diagnostic entries above are historical; this final verification supersedes their pending/down status.
+
+Security reminder: a Redis credential was pasted into the project conversation. Treat it as compromised and rotate it consistently on all three Redis instances before finalizing the lab. Do not commit the credential or its hashes.
