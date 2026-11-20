@@ -438,3 +438,50 @@ VM3's Redis data service was restarted after configuring its ACL file. After res
 - [ ] Complete remaining Redis Cluster former-primary rejoin verification and collect final screenshots/evidence.
 
 The earlier section describing VM3 as the primary records the successful failover test at that point in time. The topology table in this update records the later verified live state.
+
+
+## 11. TLS hardening and final Member B state — 20 November 2026
+
+Member B was upgraded from password-authenticated plaintext connections to TLS for Redis clients, Redis replication, and Sentinel communication.
+
+### Final topology and ports
+
+| VM | IP | Redis role at final failover check | Redis TLS port | Sentinel TLS port |
+|---|---|---|---:|---:|
+| redis-vm1 | 192.168.56.101 | Replica of VM3 | 7101 | 26380 |
+| redis-vm2 | 192.168.56.102 | Replica of VM3 | 7101 | 26380 |
+| redis-vm3 | 192.168.56.103 | Primary | 7101 | 26380 |
+
+Plaintext Redis port 7100 and Sentinel port 26379 were disabled. Final socket checks on all three VMs showed only Redis TCP/7101 and Sentinel TCP/26380 listeners among these four ports.
+
+### TLS design
+
+- Private CA generated for the lab; a distinct server certificate/key was issued for each VM.
+- Each certificate includes the VM's Host-only IP and hostname as SAN entries.
+- CA certificate and node certificate/key installed under `/etc/redis/tls/` on the corresponding VM.
+- Redis data config uses `tls-port 7101`, the node certificate/key, the CA certificate, and `tls-replication yes`.
+- Sentinel config uses `tls-port 26380`, the node certificate/key, the CA certificate, and `tls-replication yes`.
+- `tls-auth-clients no` is configured: connections are encrypted and the server certificate is validated against the private CA, while Redis ACL/password authentication remains in use. This lab configuration is not mutual TLS.
+- Existing Redis Cluster ports 7000–7005 and 17000–17005 were left untouched.
+
+### Verification performed
+
+1. OpenSSL verified all three server certificates against the private CA and displayed the correct IP/DNS SANs.
+2. TLS Redis PING tests on VM1, VM2 and VM3 each returned `PONG`.
+3. Sentinel TLS quorum check returned `OK 3 usable Sentinels. Quorum and failover authorization can be reached`.
+4. Redis ROLE queries over TLS showed VM3 as primary and VM1/VM2 as connected replicas of 192.168.56.103 on port 7101.
+5. After plaintext shutdown, `ss -lntp` on all three VMs showed listeners on 7101 and 26380, with no listeners on 7100 or 26379.
+
+### Updated completion checklist
+
+- [x] Redis ACL user and restricted key/command permissions configured and verified on all three data instances.
+- [x] TLS server certificates issued and verified for all three VMs.
+- [x] Redis TLS client connections tested successfully on all three VMs.
+- [x] Redis replication migrated to TLS port 7101.
+- [x] Sentinel TLS communication/listener enabled on port 26380 and quorum verified.
+- [x] Automatic failover verified with VM3 promoted and VM1/VM2 connected as replicas over port 7101.
+- [x] Plaintext Redis and Sentinel listeners disabled on all three VMs.
+- [ ] Rotate credentials exposed during troubleshooting.
+- [ ] Capture final screenshots/evidence and complete Member A former-primary rejoin verification.
+
+The detailed TLS settings, certificate layout, port plan, and verification commands are recorded in [Redis Sentinel Configuration and File Reference](08-redis-sentinel-configuration.md).
