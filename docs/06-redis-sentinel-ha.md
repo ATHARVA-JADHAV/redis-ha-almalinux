@@ -1,0 +1,213 @@
+# Redis Sentinel High Availability Lab
+
+## 1. Purpose and isolation
+
+Member B uses a separate standalone Redis primary-replica deployment managed by Redis Sentinel. It is independent of Member A's Redis Cluster.
+
+The Sentinel lab uses Redis data port 7100 and Sentinel port 26379. Existing Cluster ports 7000–7005 and Cluster bus ports 17000–17005 must remain untouched.
+
+## 2. VM topology
+
+| VM | Host-only IP | Redis role | Redis port | Planned Sentinel port |
+|---|---|---|---:|---:|
+| redis-vm1 | 192.168.56.101 | Primary | 7100 | 26379 |
+| redis-vm2 | 192.168.56.102 | Replica | 7100 | 26379 |
+| redis-vm3 | 192.168.56.103 | Replica | 7100 | 26379 |
+
+Planned Sentinel monitoring name: mymaster; planned quorum: 2 with three Sentinel instances.
+
+## 3. Redis data-instance configuration examples
+
+The following are the intended configuration patterns. The bind address must match the VM. Passwords are placeholders; never commit real credentials.
+
+### VM1 — primary
+
+File: /etc/redis/redis-7100.conf
+
+```conf
+bind 127.0.0.1 192.168.56.101
+protected-mode yes
+port 7100
+daemonize no
+supervised no
+logfile /var/log/redis/redis-7100.log
+dir /var/lib/redis/7100
+save 3600 1 300 100 60 10000
+appendonly yes
+appendfsync everysec
+requirepass <REDIS_PASSWORD>
+```
+
+### VM2 — replica
+
+File: /etc/redis/redis-7100.conf
+
+```conf
+bind 127.0.0.1 192.168.56.102
+protected-mode yes
+port 7100
+daemonize no
+supervised no
+logfile /var/log/redis/redis-7100.log
+dir /var/lib/redis/7100
+save 3600 1 300 100 60 10000
+appendonly yes
+appendfsync everysec
+replicaof 192.168.56.101 7100
+masterauth <REDIS_PASSWORD>
+requirepass <REDIS_PASSWORD>
+```
+
+### VM3 — replica
+
+File: /etc/redis/redis-7100.conf
+
+```conf
+bind 127.0.0.1 192.168.56.103
+protected-mode yes
+port 7100
+daemonize no
+supervised no
+logfile /var/log/redis/redis-7100.log
+dir /var/lib/redis/7100
+save 3600 1 300 100 60 10000
+appendonly yes
+appendfsync everysec
+replicaof 192.168.56.101 7100
+masterauth <REDIS_PASSWORD>
+requirepass <REDIS_PASSWORD>
+```
+
+These are documented intended examples based on the instructions issued during setup. VM3's actual file must still be inspected because its replication link is down.
+
+## 4. systemd service
+
+The same service unit was created on all three VMs:
+
+File: /etc/systemd/system/redis-sentinel-lab.service
+
+```ini
+[Unit]
+Description=Redis Sentinel Lab Instance
+After=network.target
+
+[Service]
+Type=simple
+User=redis
+Group=redis
+ExecStart=/usr/bin/redis-server /etc/redis/redis-7100.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Apply and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now redis-sentinel-lab
+sudo systemctl status redis-sentinel-lab
+```
+
+Despite its historical name, this unit runs a Redis data server on port 7100. It is not the Sentinel process. Sentinel will have its own configuration and service.
+
+## 5. Supporting preparation
+
+On each VM, the Redis data and log paths were prepared:
+
+```bash
+sudo mkdir -p /var/lib/redis/7100
+sudo chown redis:redis /var/lib/redis/7100
+sudo chmod 750 /var/lib/redis/7100
+sudo touch /var/log/redis/redis-7100.log
+sudo chown redis:redis /var/log/redis/redis-7100.log
+```
+
+SELinux port labeling was checked/updated for TCP 7100 using:
+
+```bash
+sudo semanage port -a -t redis_port_t -p tcp 7100
+```
+
+On these systems the command reported that TCP/7100 was already defined and was modified. VM1 firewall was confirmed to allow TCP/7100 from 192.168.56.0/24. Existing Cluster firewall rules were retained. vm.overcommit_memory=1 was applied and persisted on VM1, VM2, and VM3.
+
+## 6. Execution and verification log
+
+### Network preflight
+
+- VM-to-VM ping succeeded between the three Host-only addresses.
+- From VM2, ping to VM1 succeeded (4/4 packets).
+- From VM2, nc -vz 192.168.56.101 7100 connected successfully.
+- VM1 was confirmed listening on 192.168.56.101:7100 and loopback.
+
+### VM1 primary
+
+- Redis service redis-sentinel-lab was created, enabled, and started.
+- Local Redis PING returned PONG.
+- Redis was listening on loopback and VM1's Host-only address.
+- Remote access initially failed because protected mode rejected unauthenticated non-loopback connections.
+- Authentication was then configured on the primary and replica.
+
+### VM2 replica
+
+- Redis service redis-sentinel-lab was created, enabled, and started.
+- Local Redis PING returned PONG.
+- Initial replication failed with a protected-mode denial from the primary.
+- After matching primary authentication and configuring masterauth, VM2 reported:
+
+```text
+role:slave
+master_host:192.168.56.101
+master_port:7100
+master_link_status:up
+master_sync_in_progress:0
+```
+
+Status: replication verified.
+
+### VM3 replica
+
+- Data directory and log file were prepared.
+- Redis config and the same systemd unit were created.
+- Service was enabled and reported active/running.
+- INFO replication reported role:slave and master 192.168.56.101:7100, but master_link_status:down.
+- master_total_sync_attempts was reported as 54036, indicating repeated connection/synchronization attempts.
+
+Status: not yet verified. Do not proceed to Sentinel deployment until VM3 replication is healthy.
+
+Next diagnostics to collect on VM3:
+
+```bash
+sudo tail -50 /var/log/redis/redis-7100.log
+sudo cat /etc/redis/redis-7100.conf
+sudo ss -lntp | grep 7100
+redis-cli -h 192.168.56.101 -p 7100 PING
+```
+
+For the remote PING, authenticate at the interactive Redis CLI prompt rather than placing the password in shell history or process arguments. Redact all passwords before sharing output.
+
+Compare VM3's bind address, master address, masterauth, and password configuration with the working VM2 pattern. Do not disable SELinux or protected mode as a shortcut.
+
+## 7. Security notes
+
+- Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
+- Use placeholders such as <REDIS_PASSWORD> in documentation.
+- A credential was pasted into the project chat during setup; treat it as exposed and rotate it before considering the lab complete.
+- Authentication is an interim baseline. Planned Member B security work still includes Redis ACLs and TLS.
+- Keep TCP/7100 restricted to the private Host-only subnet.
+
+## 8. Remaining work
+
+- [ ] Diagnose VM3 replication link and verify master_link_status:up.
+- [ ] Verify data replication from VM1 to both replicas.
+- [ ] Deploy one Sentinel process on each VM, using TCP/26379.
+- [ ] Configure Sentinel monitoring for mymaster with quorum 2.
+- [ ] Verify Sentinel discovery and peer communication.
+- [ ] Perform a controlled primary-failure test and verify automatic promotion.
+- [ ] Verify client discovery of the promoted primary.
+- [ ] Implement ACL authentication.
+- [ ] Implement TLS for Redis client, replication, and Sentinel communication as designed.
+- [ ] Add sanitized configuration examples and screenshots/evidence.
