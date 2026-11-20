@@ -310,3 +310,86 @@ master_repl_offset:3402
 Result: VM1 is the primary; VM2 and VM3 are both connected replicas and were online with zero reported lag at the time of verification. This completes the standalone Redis primary-replica foundation. The earlier VM3 diagnostic entries above are historical; this final verification supersedes their pending/down status.
 
 Security reminder: a Redis credential was pasted into the project conversation. Treat it as compromised and rotate it consistently on all three Redis instances before finalizing the lab. Do not commit the credential or its hashes.
+
+
+## 9. Sentinel deployment and final verification — 20 November 2026
+
+The Sentinel layer was deployed separately from the Redis data processes.
+
+### Sentinel services and configuration
+
+- Sentinel configuration: `/var/lib/redis/sentinel/sentinel.conf` on each VM.
+- Sentinel systemd unit: `/etc/systemd/system/redis-sentinel.service`.
+- Sentinel process: `/usr/bin/redis-sentinel /var/lib/redis/sentinel/sentinel.conf`.
+- Sentinel port: TCP/26379.
+- Monitored master name: `mymaster`.
+- Configured quorum: `2`.
+- Sentinel log: `/var/log/redis/sentinel.log`.
+- The Redis data service remains `redis-sentinel-lab.service` on TCP/7100. Despite the unit's historical name, it runs `redis-server`, not Sentinel.
+
+The Sentinel service was enabled and running on all three VMs. The Sentinel default-user ACL entries containing `nopass` were removed from the three Sentinel configuration files so that the configured `requirepass` is enforced. Local unauthenticated PING checks returned `NOAUTH Authentication required`, and authenticated remote PING checks from VM1 to VM2 and VM3 returned `PONG`.
+
+### Sentinel quorum and peer discovery
+
+From VM1, the following command returned:
+
+```text
+SENTINEL CKQUORUM mymaster
+OK 3 usable Sentinels. Quorum and failover authorization can be reached
+```
+
+`SENTINEL SENTINELS mymaster` listed VM2 (192.168.56.102:26379) and VM3 (192.168.56.103:26379). Neither peer had `s_down` or `disconnected` flags.
+
+`SENTINEL REPLICAS mymaster` showed VM2 and VM3 as replicas of the then-current VM1 primary, each with `master-link-status:ok`.
+
+### Automatic failover test
+
+The controlled test began with VM1 as the Redis primary and VM2/VM3 as replicas.
+
+1. Wrote `sentinel-failover-test=before-failover` on VM1.
+2. Read the same key successfully from VM2 and VM3 before stopping the primary.
+3. Stopped only `redis-sentinel-lab.service` on VM1. The `redis-sentinel.service` process on VM1 remained active.
+4. Sentinel quorum remained available with three usable Sentinels.
+5. Sentinel promoted VM3 (192.168.56.103:7100). `SENTINEL MASTER mymaster` reported VM3 with the `master` flag and config epoch 1.
+6. VM3's `INFO replication` reported `role:master`; VM2 was connected as an online replica.
+7. The pre-failover key remained readable on VM3.
+8. A new value written on VM3 was read successfully from VM2.
+
+### Former-primary recovery
+
+When VM1's Redis data service was restarted, Sentinel identified it as a replica of VM3. Its first replication attempts failed because VM1 did not have the required Redis data `masterauth` directive. The Redis log showed `NOAUTH Authentication required` during REPLCONF/PSYNC.
+
+The missing `masterauth` was added to VM1's `/etc/redis/redis-7100.conf`, matching the Redis data `requirepass` used by the new primary. After restarting the VM1 Redis data service, its replication status reported:
+
+```text
+role:slave
+master_host:192.168.56.103
+master_port:7100
+master_link_status:up
+```
+
+Final verification confirmed VM3 as primary with VM1 and VM2 as online replicas. The post-failover test value was readable from the replicas.
+
+### Final Member B state
+
+| Component | Final state |
+|---|---|
+| VM1 Redis data process | Replica of VM3; replication link up |
+| VM2 Redis data process | Replica of VM3; online |
+| VM3 Redis data process | Primary |
+| VM1 Sentinel | Running |
+| VM2 Sentinel | Running |
+| VM3 Sentinel | Running |
+| Sentinel quorum | Three usable Sentinels; quorum 2 |
+| Automatic failover | Verified; VM1 failure led to VM3 promotion |
+| Post-failover write replication | Verified |
+| Former-primary recovery | Verified |
+
+The detailed, repeatable procedure with per-VM commands, expected outputs, recovery instructions, and troubleshooting is in [Redis Sentinel Failover and Recovery Runbook](07-redis-sentinel-failover-testing.md).
+
+### Security and scope notes
+
+- A Redis data credential and a Sentinel credential were exposed during interactive troubleshooting. They must be rotated before the lab is considered security-complete. Do not commit real credentials, hashes, or secret values.
+- The Sentinel authentication fix and Redis replication authentication fix are separate: Sentinel client authentication uses the Sentinel configuration, while Redis replica authentication to the data primary uses `masterauth` in the Redis data configuration.
+- TLS for Redis client, replication, and Sentinel traffic remains future work; authentication alone is not TLS encryption.
+- This Sentinel deployment manages only the standalone Redis service on port 7100. It does not manage or alter Member A's Redis Cluster on ports 7000–7005.
