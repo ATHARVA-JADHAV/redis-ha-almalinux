@@ -19,7 +19,10 @@ The goal is to understand networking, persistence, memory management, replicatio
 - `allkeys-lru` eviction demonstrated on primary VM1:7000 with a 16 MiB memory limit.
 - Cluster-native failover exercise reported: VM1:7000 was stopped, VM2:7003 was promoted, and the test key plus a new write were checked through the promoted node.
 - Remaining Member A close-out: restart former primary VM1:7000 and verify its rejoin as a replica; commit final screenshots/evidence.
+- Remaining security close-out: rotate credentials exposed during troubleshooting and implement/test TLS for Redis client, replication, and Sentinel communication.
 - Member B Sentinel HA deployment completed on Redis port 7100 and Sentinel port 26379. Three Sentinels are running with quorum 2; automatic failover from VM1 to VM3, post-failover writes, and VM1 recovery as a replica were verified. See the Sentinel deployment and failover runbook.
+- Member B ACL implementation verified: external ACL files on all three Redis data instances, restricted `app-user` (`app:*` plus the approved read/write commands), ACL persistence after VM3 restart, successful application write/read on VM1, and `NOPERM` for an out-of-pattern key.
+- Sentinel quorum/failover authorization verified with `SENTINEL CKQUORUM mymaster` (3 usable Sentinels; quorum 2). Current verified Member B topology: VM1 primary, VM2 and VM3 replicas.
 
 ## Lab environment
 
@@ -77,8 +80,8 @@ The final role balance was achieved by promoting VM3:7004 to primary for slots 1
 - Separate Redis Sentinel master-replica topology.
 - Sentinel quorum and automatic failover.
 - Client discovery of the promoted primary.
-- Redis ACL authentication.
-- TLS encryption for data in transit and mutual TLS where required.
+- Redis ACL authentication and restricted application user (implemented and verified).
+- TLS encryption for data in transit and mutual TLS where required (remaining).
 
 > Redis Cluster and Sentinel are separate deployment modes in this lab. Sentinel does not manage Redis Cluster's native failover.
 
