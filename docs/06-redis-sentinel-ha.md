@@ -191,6 +191,22 @@ For the remote PING, authenticate at the interactive Redis CLI prompt rather tha
 
 Compare VM3's bind address, master address, masterauth, and password configuration with the working VM2 pattern. Do not disable SELinux or protected mode as a shortcut.
 
+
+### VM3 diagnostic update — 20 November 2026
+
+Further log inspection narrowed the failure to Redis authentication during replication:
+
+- VM3 log reports that the primary answers PING, but subsequent REPLCONF and PSYNC/SYNC stages return `-NOAUTH Authentication required`.
+- VM3's TCP listeners were confirmed on both `192.168.56.103:7100` and `127.0.0.1:7100`.
+- A first attempt to print a sanitized config with sed failed due to an incorrect capture-group placement; no configuration was changed by that command.
+- The next step is to inspect the sanitized effective file contents and confirm that `masterauth` matches the primary's configured password. Do not expose the password in terminal output or chat.
+
+Use this safe inspection command on VM3:
+
+```bash
+sudo awk '$1=="requirepass" || $1=="masterauth" {$2="<REDACTED>"} {print}' /etc/redis/redis-7100.conf
+```
+
 ## 7. Security notes
 
 - Do not commit actual Redis passwords, ACL secrets, TLS private keys, or private key material.
